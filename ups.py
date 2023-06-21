@@ -1,13 +1,15 @@
 import mimetypes
 
 def download_webpage(url, base_url):
+    results = []
+    
     try:
         http = urllib3.PoolManager()
         response = http.request('GET', url)
         if response.status == 200:
             # Extract the filename from the URL
             filename = os.path.basename(urlparse(url).path)
-            
+
             # Check if the file is an HTML file
             content_type = response.headers.get('Content-Type')
             is_html = False
@@ -33,6 +35,8 @@ def download_webpage(url, base_url):
             file_path = os.path.join(download_dir, filename)
             with open(file_path, 'wb') as file:
                 file.write(response.data)
+            
+            results.append({'URL': url, 'Status': response.status})
 
             # Parse the HTML content with BeautifulSoup
             soup = BeautifulSoup(response.data, 'html.parser')
@@ -50,8 +54,9 @@ def download_webpage(url, base_url):
                         css_file_path = os.path.join(download_dir, css_filename)
                         with open(css_file_path, 'wb') as css_file:
                             css_file.write(css_response.data)
+                        results.append({'URL': css_url, 'Status': css_response.status})
                     else:
-                        print(f"Error downloading CSS resource from URL '{css_url}': Status Code {css_response.status}")
+                        results.append({'URL': css_url, 'Status': css_response.status, 'Error': f"Error downloading CSS resource from URL '{css_url}': Status Code {css_response.status}"})
                 elif tag.name == 'img':
                     # Save image file
                     img_url = urljoin(base_url, tag.get('src'))
@@ -61,8 +66,9 @@ def download_webpage(url, base_url):
                         img_file_path = os.path.join(download_dir, img_filename)
                         with open(img_file_path, 'wb') as img_file:
                             img_file.write(img_response.data)
+                        results.append({'URL': img_url, 'Status': img_response.status})
                     else:
-                        print(f"Error downloading image resource from URL '{img_url}': Status Code {img_response.status}")
+                        results.append({'URL': img_url, 'Status': img_response.status, 'Error': f"Error downloading image resource from URL '{img_url}': Status Code {img_response.status}"})
                 elif tag.name == 'script':
                     # Save script file
                     script_url = urljoin(base_url, tag.get('src'))
@@ -72,13 +78,15 @@ def download_webpage(url, base_url):
                         script_file_path = os.path.join(download_dir, script_filename)
                         with open(script_file_path, 'wb') as script_file:
                             script_file.write(script_response.data)
+                        results.append({'URL': script_url, 'Status': script_response.status})
                     else:
-                        print(f"Error downloading script resource from URL '{script_url}': Status Code {script_response.status}")
+                        results.append({'URL': script_url, 'Status': script_response.status, 'Error': f"Error downloading script resource from URL '{script_url}': Status Code {script_response.status}"})
 
             print(f"Webpage and associated resources saved in '{download_dir}'.")
-
         else:
-            print(f"Error downloading webpage from URL '{url}': Status Code {response.status}")
+            results.append({'URL': url, 'Status': response.status, 'Error': f"Error downloading webpage from URL '{url}': Status Code {response.status}"})
 
     except Exception as e:
-        print(f"Error occurred while downloading webpage from URL '{url}': {str(e)}")
+        results.append({'URL': url, 'Error': f"Error occurred while downloading webpage from URL '{url}': {str(e)}"})
+
+    return results
