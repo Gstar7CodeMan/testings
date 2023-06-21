@@ -23,7 +23,7 @@ def login_and_download_page(login_url, username, password, page_url, save_direct
             page.click('button[type="submit"]')
 
             # Wait for navigation to complete
-            page.wait_for_navigation()
+            page.wait_for_load_state("networkidle")
 
             # Check if login was successful by checking the URL or any element specific to logged-in state
             if page.url == login_url:
@@ -34,7 +34,7 @@ def login_and_download_page(login_url, username, password, page_url, save_direct
             page.goto(page_url)
 
             # Wait for the page to load
-            page.wait_for_load_state()
+            page.wait_for_load_state("networkidle")
 
             # Get the page content
             page_content = page.content()
@@ -75,7 +75,7 @@ def login_and_download_page(login_url, username, password, page_url, save_direct
 
             # Save the page content to a file
             filename = os.path.join(save_directory, "downloaded_page.html")
-            with open(filename, "w", encoding="utf-8") as file:
+            with open(filename, "wb") as file:
                 file.write(page_content)
 
             print(f"Webpage downloaded and saved as '{filename}' successfully.")
@@ -90,7 +90,7 @@ def main():
     login_url = 'https://example.com/login'
     username = 'your_username'
     password = 'your_password'
-    page_url = 'https://example.com/target_page'
+    page_url = 'https://example.com/page'
     save_directory = 'downloaded_pages'
 
     # Create the save directory if it doesn't exist
@@ -99,5 +99,5 @@ def main():
     login_and_download_page(login_url, username, password, page_url, save_directory)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
