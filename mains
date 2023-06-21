@@ -1,81 +1,103 @@
-import mimetypes
+from playwright.sync_api import sync_playwright
+import os
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
-def download_webpage(url, base_url):
-    try:
-        http = urllib3.PoolManager()
-        response = http.request('GET', url)
-        if response.status == 200:
-            # Extract the filename from the URL
-            filename = os.path.basename(urlparse(url).path)
-            
-            # Check if the file is an HTML file
-            content_type = response.headers.get('Content-Type')
-            is_html = False
-            if content_type:
-                file_type, _ = mimetypes.guess_type(content_type)
-                if file_type == 'text/html':
-                    is_html = True
 
-            # Append the correct extension based on the file type
-            if is_html:
-                filename += '.html'
-            else:
-                ext = mimetypes.guess_extension(content_type)
-                if ext:
-                    filename += ext
+def login_and_download_page(login_url, username, password, page_url, save_directory):
+    with sync_playwright() as playwright:
+        browser_type = playwright.chromium
+        browser = browser_type.launch()
+        page = browser.new_page()
 
-            # Create a directory to store the downloaded files
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            download_dir = os.path.join(base_dir, 'downloaded_pages')
-            os.makedirs(download_dir, exist_ok=True)
+        try:
+            # Navigate to the login page
+            page.goto(login_url)
 
-            # Save the file
-            file_path = os.path.join(download_dir, filename)
-            with open(file_path, 'wb') as file:
-                file.write(response.data)
+            # Find the username and password input fields and enter the credentials
+            page.fill('input[name="username"]', username)
+            page.fill('input[name="password"]', password)
+
+            # Submit the login form
+            page.click('button[type="submit"]')
+
+            # Wait for navigation to complete
+            page.wait_for_load_state("networkidle")
+
+            # Check if login was successful by checking the URL or any element specific to logged-in state
+            if page.url == login_url:
+                print("Login failed. Please check your credentials.")
+                return
+
+            # Navigate to the target page after successful login
+            page.goto(page_url)
+
+            # Wait for the page to load
+            page.wait_for_load_state("networkidle")
+
+            # Get the page content
+            page_content = page.content()
 
             # Parse the HTML content with BeautifulSoup
-            soup = BeautifulSoup(response.data, 'html.parser')
+            soup = BeautifulSoup(page_content, 'html.parser')
 
-            # Save associated resources (CSS, images, etc.)
-            resource_tags = soup.find_all(['link', 'img', 'script'])
+            # Find all link tags and get the associated CSS files
+            css_files = soup.find_all('link', {'rel': 'stylesheet'})
+            for css_file in css_files:
+                css_url = urljoin(page.url, css_file['href'])
+                css_response = requests.get(css_url)
+                if css_response.status_code == 200:
+                    # Save the CSS file
+                    css_filename = os.path.basename(css_url)
+                    css_filepath = os.path.join(save_directory, css_filename)
+                    with open(css_filepath, 'wb') as file:
+                        file.write(css_response.content)
+                    print(f"CSS file '{css_filename}' downloaded successfully.")
+                else:
+                    print(f"Error downloading CSS file from URL '{css_url}'. Status Code: {css_response.status_code}")
 
-            for tag in resource_tags:
-                if tag.name == 'link' and tag.get('rel') == ['stylesheet']:
-                    # Save CSS file
-                    css_url = urljoin(base_url, tag.get('href'))
-                    css_file_name = os.path.basename(urlparse(css_url).path)
-                    css_file_path = os.path.join(download_dir, css_file_name)
-                    css_response = http.request('GET', css_url)
-                    if css_response.status == 200:
-                        download_resource(css_response.data, css_file_path)
+            # Find all script tags and get the associated JavaScript files
+            script_files = soup.find_all('script')
+            for script_file in script_files:
+                if script_file.get('src'):
+                    script_url = urljoin(page.url, script_file['src'])
+                    script_response = requests.get(script_url)
+                    if script_response.status_code == 200:
+                        # Save the JavaScript file
+                        script_filename = os.path.basename(script_url)
+                        script_filepath = os.path.join(save_directory, script_filename)
+                        with open(script_filepath, 'wb') as file:
+                            file.write(script_response.content)
+                        print(f"JavaScript file '{script_filename}' downloaded successfully.")
                     else:
-                        print(f"Error downloading CSS resource from URL '{css_url}': Status Code {css_response.status}")
-                elif tag.name == 'img':
-                    # Save image file
-                    img_url = urljoin(base_url, tag.get('src'))
-                    img_file_name = os.path.basename(urlparse(img_url).path)
-                    img_file_path = os.path.join(download_dir, img_file_name)
-                    img_response = http.request('GET', img_url)
-                    if img_response.status == 200:
-                        download_resource(img_response.data, img_file_path)
-                    else:
-                        print(f"Error downloading image resource from URL '{img_url}': Status Code {img_response.status}")
-                elif tag.name == 'script':
-                    # Save script file
-                    script_url = urljoin(base_url, tag.get('src'))
-                    script_file_name = os.path.basename(urlparse(script_url).path)
-                    script_file_path = os.path.join(download_dir, script_file_name)
-                    script_response = http.request('GET', script_url)
-                    if script_response.status == 200:
-                        download_resource(script_response.data, script_file_path)
-                    else:
-                        print(f"Error downloading script resource from URL '{script_url}': Status Code {script_response.status}")
+                        print(f"Error downloading JavaScript file from URL '{script_url}'. Status Code: {script_response.status_code}")
 
-            print(f"Webpage and associated resources saved in '{download_dir}'.")
+            # Save the page content to a file
+            filename = os.path.join(save_directory, "downloaded_page.html")
+            with open(filename, "wb") as file:
+                file.write(page_content)
 
-        else:
-            print(f"Error downloading webpage from URL '{url}': Status Code {response.status}")
+            print(f"Webpage downloaded and saved as '{filename}' successfully.")
 
-    except Exception as e:
-        print(f"Error occurred while downloading webpage from URL '{url}': {str(e)}")
+        except Exception as e:
+            print(f"An error occurred while logging in and downloading the webpage: {str(e)}")
+
+        browser.close()
+
+
+def main():
+    login_url = 'https://example.com/login'
+    username = 'your_username'
+    password = 'your_password'
+    page_url = 'https://example.com/page'
+    save_directory = 'downloaded_pages'
+
+    # Create the save directory if it doesn't exist
+    os.makedirs(save_directory, exist_ok=True)
+
+    login_and_download_page(login_url, username, password, page_url, save_directory)
+
+
+if __name__ == "__main__":
+    main()
