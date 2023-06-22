@@ -1,4 +1,5 @@
-from django.db.models import F, Case, When
+from django.db.models import F, Case, When, Value
+from django.db.models.functions import Cast
 from your_app.models import gdata
 
 def update_fields_with_conversion():
@@ -22,9 +23,9 @@ def update_fields_with_conversion():
         for value, grade in grade_mapping.items():
             cases.append(When(**{
                 field_name: value,
-                'then': grade,
+                'then': Value(grade, output_field=CharField()),
             }))
 
         gdata.objects.update(
-            **{field_name: Case(*cases, default=F(field_name))}
+            **{field_name: Case(*cases, default=F(field_name), output_field=CharField())}
         )
